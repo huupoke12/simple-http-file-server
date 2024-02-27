@@ -68,7 +68,7 @@ html_template = r'''
         <section>
             <h2>Upload file</h2>
             <form method="post" enctype="multipart/form-data">
-                <input type="file" name="file" required>
+                <input type="file" name="file" multiple required>
                 <input type="submit" value="Upload">
             </form>
             $upload_result_html
@@ -89,10 +89,10 @@ class SimpleHTTPFileServerRequestHandler(BaseHTTPRequestHandler):
         urlparse_result = urlparse(self.path)
         return Path(unquote(urlparse_result.path).lstrip('/'))
 
-    def load_html(self, path, uploaded_filename=None):
+    def load_html(self, path, uploaded_filenames=[]):
         out_html = html_template.replace(
             '$upload_result_html',
-            f'<p>File <span style="font-weight: bold">{uploaded_filename}</span> has been uploaded.</p>' if uploaded_filename != None else ''
+            f'<p><span style="font-weight: bold">{len(uploaded_filenames)}</span> files have been uploaded.</p>' if uploaded_filenames else ''
         )
         file_list_html = []
         for file in sorted(path.iterdir()):
@@ -137,16 +137,17 @@ class SimpleHTTPFileServerRequestHandler(BaseHTTPRequestHandler):
             raw_email_message += f'{k}: {v}\r\n'.encode('ascii')
         raw_email_message += b'\r\n' + self.rfile.read(request_length)
         email_message = message_from_bytes(raw_email_message, policy=policy.strict)
-        filename = None
+        filenames = []
         for part in email_message.walk():
             filename = part.get_filename()
             if filename != None:
                 target_path = Path(path / filename)
                 target_path.write_bytes(part.get_content())
+                filenames.append(filename)
         self.send_response(201)
         self.send_header('Content-Type', 'text/html')
         self.end_headers()
-        self.wfile.write(self.load_html(path, uploaded_filename=filename).encode('utf-8'))
+        self.wfile.write(self.load_html(path, uploaded_filenames=filenames).encode('utf-8'))
 
 
 def run_server(
